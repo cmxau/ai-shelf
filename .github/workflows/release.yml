@@ -1,0 +1,29 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check tag matches VERSION
+        run: |
+          VERSION=$(cat VERSION)
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match VERSION $VERSION" >&2
+            exit 1
+          fi
+      - name: Build
+        run: ./build.sh
+      - name: Package
+        run: ditto -c -k --keepParent "AI Shelf.app" "AI-Shelf-$(cat VERSION).zip"
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" "AI-Shelf-$(cat VERSION).zip" --title "AI Shelf $(cat VERSION)" --generate-notes

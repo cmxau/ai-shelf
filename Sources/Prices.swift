@@ -13,7 +13,7 @@ func userPrices() -> [(String, [Double])] {
             raw.split(whereSeparator: \.isNewline).compactMap { line -> (String, [Double])? in
                 let w = line.split(whereSeparator: \.isWhitespace).map(String.init)
                 let n = w.dropFirst().compactMap(Double.init)
-                return w.count == 5 && n.count == 4 ? (w[0].lowercased(), n) : nil
+                return w.count == 5 && n.count == 4 && n.allSatisfy({ $0.isFinite && $0 >= 0 }) ? (w[0].lowercased(), n) : nil
             }
         )
     }
@@ -208,8 +208,11 @@ final class PriceBook: ObservableObject {
             URLSession.shared.dataTask(with: req) { data, resp, err in
                 defer { group.leave() }
                 var r: (items: [String: [Double]], note: String)
-                if let data, (resp as? HTTPURLResponse)?.statusCode == 200 {
-                    let items = parse(String(decoding: data, as: UTF8.self))
+                if let data, (resp as? HTTPURLResponse)?.statusCode == 200, data.count <= 8 << 20 {
+                    // untrusted page: keep only plausible prices ($/MTok, finite, 0...10000) under short model names
+                    let items = parse(String(decoding: data, as: UTF8.self)).filter {
+                        $0.key.count <= 100 && $0.value.count == 4 && $0.value.allSatisfy { $0.isFinite && $0 >= 0 && $0 <= 10_000 }
+                    }
                     r = (items, items.isEmpty ? "page format not recognised" : "\(items.count) models")
                 } else {
                     r = ([:], err?.localizedDescription ?? "HTTP error")
@@ -230,8 +233,7 @@ final class PriceBook: ObservableObject {
             if notes.contains(where: { !$0.contains("failed") }) { self.fetched = Date() }
             self.status = notes.joined(separator: " · ") + (self.fetched.map { " — updated \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "")
             self.busy = false
-            try? FileManager.default.createDirectory(at: self.file.deletingLastPathComponent(), withIntermediateDirectories: true)
-            if let d = try? JSONEncoder().encode(Saved(fetched: self.fetched?.timeIntervalSince1970 ?? 0, items: self.items)) { try? d.write(to: self.file) }
+            if let d = try? JSONEncoder().encode(Saved(fetched: self.fetched?.timeIntervalSince1970 ?? 0, items: self.items)) { privateWrite(d, to: self.file) }
         }
     }
 }

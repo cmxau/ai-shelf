@@ -45,7 +45,7 @@ func loadAgy() -> [Project] {
                 """, json: true))) as? [[String: Any]] ?? []
     var groups: [String: [Project]] = [:]
     for r in rows {
-        guard let cid = r["id"] as? String, let w = r["w"] as? String,
+        guard let cid = r["id"] as? String, isSafeID(cid), let w = r["w"] as? String,
             let a = try? JSONSerialization.jsonObject(with: Data(w.utf8)) as? [String],
             let path = a.first.flatMap(URL.init(string:))?.path
         else { continue }
@@ -128,7 +128,7 @@ func loadCodex() -> [Project] {
 /// or the legacy single .json object (header fields plus a "messages" array).
 func geminiRecords(_ f: URL) -> [[String: Any]] {
     if f.pathExtension == "json" {
-        guard let d = try? Data(contentsOf: f), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [] }
+        guard let d = readCapped(f, max: 64 << 20), let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any] else { return [] }
         return [o] + (o["messages"] as? [[String: Any]] ?? [])
     }
     return read(f).split(separator: "\n").compactMap(jsonObj)
@@ -229,7 +229,8 @@ func sessionPreview(_ p: Project) -> [(String, String)] {
     if p.agent == "gemini", let f = p.trash.first { return geminiPreview(f).map { ($0.0, cut($0.1)) } }
     if let cid = p.convIDs.first {  // agy keeps only a title + preview outside its binary DBs
         let row =
-            ((try? JSONSerialization.jsonObject(with: sqlite("select title, preview from conversation_summaries where conversation_id='\(cid)'", json: true)))
+            ((try? JSONSerialization.jsonObject(
+                with: sqlite("select title, preview from conversation_summaries where conversation_id=\(sqlQuote(cid))", json: true)))
             as? [[String: Any]])?.first
         return [("Title", row?["title"] as? String ?? ""), ("Preview", row?["preview"] as? String ?? "")].filter { !$0.1.isEmpty }.map { ($0.0, cut($0.1)) }
     }
@@ -247,15 +248,26 @@ func relocate(_ p: Project, to new: String) -> String? {
             "Fix Path works on Claude projects only. Antigravity stores workspace paths inside binary databases, where a naive rewrite could corrupt conversations."
     }
     let fm = FileManager.default
+    // only a history dir that sits directly in the Claude root, and only to an absolute, plain path
+    let root = claudeRoot.resolvingSymlinksInPath().path
+    guard dir.deletingLastPathComponent().resolvingSymlinksInPath().path == root, new.hasPrefix("/"), !hasControl(new) else {
+        return "Fix Path only works on projects inside \(claudeRoot.path), with an absolute new folder."
+    }
     let name = String(new.map { $0.isASCII && ($0.isLetter || $0.isNumber) ? $0 : "-" })
     let dest = dir.deletingLastPathComponent().appendingPathComponent(name)
     if dest != dir && fm.fileExists(atPath: dest.path) { return "That folder already has its own Claude history." }
+    let jsonNew = new.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"")  // keep the JSON valid
     for f in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil)) ?? [] where f.pathExtension == "jsonl" {
-        guard var t = try? String(contentsOf: f, encoding: .utf8) else { continue }
-        for old in [p.path, p.path.replacingOccurrences(of: "/", with: "\\/")] {
-            t = t.replacingOccurrences(of: "\"cwd\":\"\(old)\"", with: "\"cwd\":\"\(new)\"")
+        guard (try? f.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) != true, var t = try? String(contentsOf: f, encoding: .utf8) else {
+            continue
         }
-        try? t.write(to: f, atomically: true, encoding: .utf8)
+        let perms = (try? fm.attributesOfItem(atPath: f.path)[.posixPermissions]) as? NSNumber
+        for old in [p.path, p.path.replacingOccurrences(of: "/", with: "\\/")] {
+            t = t.replacingOccurrences(of: "\"cwd\":\"\(old)\"", with: "\"cwd\":\"\(jsonNew)\"")
+        }
+        if (try? t.write(to: f, atomically: true, encoding: .utf8)) != nil, let perms {
+            try? fm.setAttributes([.posixPermissions: perms], ofItemAtPath: f.path)
+        }
     }
     do { if dest != dir { try fm.moveItem(at: dir, to: dest) } } catch { return error.localizedDescription }
     return nil

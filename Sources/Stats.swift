@@ -44,6 +44,25 @@ struct Lifetime {
     var today: [String: Usage] { all.days[dayFmt.string(from: Date())] ?? [:] }
 }
 
+extension Usage {
+    /// Every counter must be a believable token count: negative or huge values from a doctored file would trap on `+=` overflow.
+    var plausible: Bool { [input, output, cacheWrite, cacheRead].allSatisfy { (0...(1 << 36)).contains($0) } }
+}
+
+extension FileStats {
+    /// Imported/synced entries are untrusted: bounded sizes, sane counters, short strings. nil = reject the entry.
+    var checked: FileStats? {
+        guard days.count <= 20_000, models.count <= 1_000, total.plausible, models.values.allSatisfy(\.plausible),
+            days.values.allSatisfy({ $0.count <= 1_000 && $0.keys.allSatisfy { $0.count <= 200 } && $0.values.allSatisfy(\.plausible) }),
+            days.keys.allSatisfy({ $0.count <= 10 }), models.keys.allSatisfy({ $0.count <= 200 }),
+            (project?.count ?? 0) <= 4096, (agent?.count ?? 0) <= 32, size >= 0, mtime.isFinite
+        else { return nil }
+        return self
+    }
+}
+
+let maxImportBytes = 128 << 20, maxImportEntries = 500_000
+
 struct StatsExport: Codable { var app = "ai-shelf"; var version = 1; var exported: Double; var ledger: [String: FileStats] }
 
 /// Light aggregate used by list rows (no per-day detail).
@@ -199,8 +218,7 @@ final class StatsStore: ObservableObject {
     }
 
     private func save() {
-        try? FileManager.default.createDirectory(at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
-        if let d = try? JSONEncoder().encode(cache) { try? d.write(to: cacheURL) }
+        if let d = try? JSONEncoder().encode(cache) { privateWrite(d, to: cacheURL) }
     }
 
     func export(to url: URL) {
@@ -213,9 +231,9 @@ final class StatsStore: ObservableObject {
 
     /// Merge an export into the ledger: new session files are added; where both sides have one, the newer wins.
     func importStats(from url: URL) {
-        guard let d = try? Data(contentsOf: url), let e = try? JSONDecoder().decode(StatsExport.self, from: d),
+        guard let d = readCapped(url, max: maxImportBytes), let e = try? JSONDecoder().decode(StatsExport.self, from: d),
             ["ai-shelf", "AI Shelf", "Session Shelf"].contains(e.app),
-            e.version == 1
+            e.version == 1, e.ledger.count <= maxImportEntries
         else {
             dataStatus = "That file isn't an AI Shelf statistics export."; return
         }
@@ -263,7 +281,9 @@ final class StatsStore: ObservableObject {
 
     private func merge(_ e: StatsExport) -> (added: Int, updated: Int) {
         var added = 0, updated = 0
-        for (k, v) in e.ledger {
+        for (k, v0) in e.ledger {
+            // keys are session file names; skip anything else, and anything with absurd numbers
+            guard k.count <= 256, !hasControl(k), !k.contains("/"), let v = v0.checked else { continue }
             if let c = cache[k] { if v.mtime > c.mtime { cache[k] = v; updated += 1 } } else { cache[k] = v; added += 1 }
         }
         return (added, updated)
@@ -274,8 +294,14 @@ final class StatsStore: ObservableObject {
         let dir = setting("syncFolder")
         guard !dir.isEmpty else { return }
         let u = URL(fileURLWithPath: dir).appendingPathComponent("ai-shelf-stats.json")
-        if let d = try? Data(contentsOf: u), let e = try? JSONDecoder().decode(StatsExport.self, from: d), e.version == 1 { _ = merge(e); save() }
-        if let d = try? JSONEncoder().encode(StatsExport(exported: Date().timeIntervalSince1970, ledger: cache)) { try? d.write(to: u, options: .atomic) }
+        if let d = readCapped(u, max: maxImportBytes), let e = try? JSONDecoder().decode(StatsExport.self, from: d), e.version == 1,
+            e.ledger.count <= maxImportEntries
+        {
+            _ = merge(e); save()
+        }
+        if let d = try? JSONEncoder().encode(StatsExport(exported: Date().timeIntervalSince1970, ledger: cache)) {
+            if (try? d.write(to: u, options: .atomic)) != nil { try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: u.path) }
+        }
     }
 
     func summary(_ p: Project) -> Summary? {

@@ -70,8 +70,8 @@ func loadAgy() -> [Project] {
 // Built from the vendors' own source definitions (openai/codex protocol.rs, google-gemini/gemini-cli chatRecordingTypes.ts),
 // NOT from real session data: neither CLI has any on this machine. Treat as unverified until tried on real sessions.
 
-var codexRoot: URL { folder("codexRoot", home.path + "/.codex/sessions") }
-var geminiRoot: URL { folder("geminiRoot", home.path + "/.gemini") }
+var codexRoot: URL { folder(Pref.codexRoot, home.path + "/.codex/sessions") }
+var geminiRoot: URL { folder(Pref.geminiRoot, home.path + "/.gemini") }
 let historyAgents = ["claude", "agy", "codex", "gemini"]  // agents we can read sessions from
 let statsAgents = ["claude", "codex", "gemini"]  // of those, the ones that record token usage
 

@@ -4,13 +4,13 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var m = Model.shared
-    @AppStorage("cli") var cli = "claude"
-    @AppStorage("terminal") var terminal = "Terminal"
-    @AppStorage("autoReload") var autoReload = false
-    @AppStorage("trashDelete") var trashDelete = true
-    @AppStorage("showCards") var showCards = true
-    @AppStorage("columns") var cols = TableColumnCustomization<Project>()  // visibility + order, edited from the column headers
-    @AppStorage("prices") var prices = ""  // only here so cost cells refresh when prices change
+    @AppStorage(Pref.cli) var cli = "claude"
+    @AppStorage(Pref.terminal) var terminal = "Terminal"
+    @AppStorage(Pref.autoReload) var autoReload = false
+    @AppStorage(Pref.trashDelete) var trashDelete = true
+    @AppStorage(Pref.showCards) var showCards = true
+    @AppStorage(Pref.columns) var cols = TableColumnCustomization<Project>()  // visibility + order, edited from the column headers
+    @AppStorage(Pref.prices) var prices = ""  // only here so cost cells refresh when prices change
     @ObservedObject var stats = StatsStore.shared
     @ObservedObject var book = PriceBook.shared
     @Environment(\.openWindow) var openWindow
@@ -192,8 +192,8 @@ struct ContentView: View {
         .onAppear {
             NSApp.setActivationPolicy(.regular)  // an open window always gets a menu bar, even with "Show Dock icon" off
             NSApp.activate(ignoringOtherApps: true)
-            if UserDefaults.standard.integer(forKey: "columnsVersion") < 3 {
-                cols = TableColumnCustomization(); UserDefaults.standard.set(3, forKey: "columnsVersion")
+            if UserDefaults.standard.integer(forKey: Pref.columnsVersion) < 3 {
+                cols = TableColumnCustomization(); UserDefaults.standard.set(3, forKey: Pref.columnsVersion)
             }
             // a saved choice may no longer be installed
             if cli != "all" && !m.agents.contains(cli) { cli = m.agents.first ?? "all" }

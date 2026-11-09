@@ -20,7 +20,7 @@ let builtinAgents = ["claude", "agy", "codex", "gemini", "opencode", "aider", "g
 var checkedAgents: [String: Bool] = [:]
 
 func customAgents() -> [String] {
-    setting("customAgents").split(whereSeparator: \.isNewline)
+    setting(Pref.customAgents).split(whereSeparator: \.isNewline)
         .compactMap { $0.split(separator: " ").first.map(String.init) }
         .filter { isAgentName($0) && !builtinAgents.contains($0) }
 }
@@ -30,7 +30,7 @@ func isAgentName(_ s: String) -> Bool {
         && s.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "-_.".contains($0)) }
 }
 func catalog() -> [String] { builtinAgents + customAgents() }
-func disabledAgents() -> Set<String> { Set(setting("disabledAgents").split(separator: ",").map(String.init)) }
+func disabledAgents() -> Set<String> { Set(setting(Pref.disabledAgents).split(separator: ",").map(String.init)) }
 
 /// One login-shell call for every name not checked yet.
 func detectAgents(_ names: [String]) {
@@ -54,7 +54,7 @@ func activeAgents() -> [String] { detectAgents(catalog()); return catalog().filt
 
 /// Extra flags from Settings, one line per agent: "claude --dangerously-skip-permissions".
 func extraFlags(_ agent: String) -> String {
-    setting("agentFlags").split(whereSeparator: \.isNewline).compactMap { line -> String? in
+    setting(Pref.agentFlags).split(whereSeparator: \.isNewline).compactMap { line -> String? in
         let w = line.split(separator: " ", maxSplits: 1)
         return w.count == 2 && String(w[0]) == agent ? String(w[1]) : nil
     }.joined(separator: " ")
@@ -70,7 +70,7 @@ let resumeFlag = ["claude": "--resume", "agy": "--conversation", "codex": "resum
 /// Opens a project (or one session of it) in the chosen terminal with the chosen CLI.
 func openProject(_ p: Project) {
     let d = UserDefaults.standard
-    let cli = !p.agent.isEmpty ? p.agent : d.string(forKey: "cli") ?? "claude"
+    let cli = !p.agent.isEmpty ? p.agent : d.string(forKey: Pref.cli) ?? "claude"
     // path and session id come from files on disk (a session's recorded cwd / id): refuse anything that isn't a plain absolute path / token
     guard isAgentName(cli), p.path.hasPrefix("/"), !hasControl(p.path) else {
         Model.shared.error = "Won't open: \(oneLine(p.path)) isn't a valid folder path."; return
@@ -80,11 +80,11 @@ func openProject(_ p: Project) {
     let cmd = cli + (flags.isEmpty ? "" : " " + flags) + resume
     let line = "cd \(sh(p.path)) && \(cmd)"
     let inShell = ["zsh", "-lic", cmd]  // GUI apps lack the shell PATH, so go through a login shell
-    switch d.string(forKey: "terminal") ?? "Terminal" {
+    switch d.string(forKey: Pref.terminal) ?? "Terminal" {
     case "iTerm":
         osascript([
             "tell application \"iTerm\"", "activate",
-            pref("openInTab", false)
+            pref(Pref.openInTab, false)
                 ? "if (count of windows) = 0 then create window with default profile else tell current window to create tab with default profile"
                 : "create window with default profile",
             "tell current session of current window to write text \"\(osa(line))\"", "end tell",
@@ -156,7 +156,7 @@ func exportTranscript(_ p: Project) {
 }
 
 func notify(_ title: String, _ body: String) {
-    guard pref("notify", true) else { return }
+    guard pref(Pref.notify, true) else { return }
     let c = UNUserNotificationCenter.current()
     c.requestAuthorization(options: [.alert, .sound]) { ok, _ in
         guard ok else {
@@ -185,7 +185,7 @@ enum HotKey {
             installed = true
         }
         if let r = ref { UnregisterEventHotKey(r); ref = nil }
-        if pref("hotkey", true) {
+        if pref(Pref.hotkey, true) {
             RegisterEventHotKey(
                 UInt32(kVK_ANSI_S), UInt32(controlKey | optionKey), EventHotKeyID(signature: 0x4149_5348, id: 1), GetApplicationEventTarget(), 0, &ref)
         }

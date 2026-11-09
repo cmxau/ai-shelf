@@ -15,11 +15,11 @@ final class Model: ObservableObject {
     @Published var undos: [Undo] = []
     @Published var sortOrder = [RowSort(.when, .reverse)]
     @Published var agents: [String] = []
-    @Published var pins = Set(UserDefaults.standard.stringArray(forKey: "pins") ?? []) {
-        didSet { UserDefaults.standard.set(pins.sorted(), forKey: "pins") }
+    @Published var pins = Set(UserDefaults.standard.stringArray(forKey: Pref.pins) ?? []) {
+        didSet { UserDefaults.standard.set(pins.sorted(), forKey: Pref.pins) }
     }
-    @Published var notes = UserDefaults.standard.dictionary(forKey: "notes") as? [String: String] ?? [:] {
-        didSet { UserDefaults.standard.set(notes, forKey: "notes") }
+    @Published var notes = UserDefaults.standard.dictionary(forKey: Pref.notes) as? [String: String] ?? [:] {
+        didSet { UserDefaults.standard.set(notes, forKey: Pref.notes) }
     }
     @Published var running = Set<String>()  // working dirs with a live agent process
     @Published var contentHits = Set<String>()  // session ids whose conversation text matches the search
@@ -31,9 +31,9 @@ final class Model: ObservableObject {
         // The toolbar pickers are per-session; each launch starts from the defaults chosen in Settings.
         refreshAgents()
         let d = UserDefaults.standard
-        let agent = setting("defaultAgent").nonEmpty ?? "claude"
-        d.set(agent == "all" || agents.contains(agent) ? agent : agents.first ?? "all", forKey: "cli")
-        d.set(setting("defaultTerminal").nonEmpty ?? "Terminal", forKey: "terminal")
+        let agent = setting(Pref.defaultAgent).nonEmpty ?? "claude"
+        d.set(agent == "all" || agents.contains(agent) ? agent : agents.first ?? "all", forKey: Pref.cli)
+        d.set(setting(Pref.defaultTerminal).nonEmpty ?? "Terminal", forKey: Pref.terminal)
         applyDock()
         reload()
         PriceBook.shared.refreshIfStale()
@@ -136,7 +136,7 @@ final class Model: ObservableObject {
     func refreshAgents() { agents = activeAgents() }
 
     func reload() {
-        projects = loadProjects(UserDefaults.standard.string(forKey: "cli") ?? "claude")
+        projects = loadProjects(UserDefaults.standard.string(forKey: Pref.cli) ?? "claude")
         selection = []; preview = []
         StatsStore.shared.refresh(projects)
         refreshRunning()
@@ -156,12 +156,12 @@ final class Model: ObservableObject {
     func request(_ ps: [Project]) {
         let ps = ps.filter { !$0.trash.isEmpty }
         if ps.isEmpty { return }
-        if pref("confirmDelete", true) { pending = ps } else { delete(ps) }
+        if pref(Pref.confirmDelete, true) { pending = ps } else { delete(ps) }
     }
 
     func delete(_ ps: [Project]) {
         pending = []
-        let toTrash = pref("trashDelete", true)  // off = permanent, so nothing to undo
+        let toTrash = pref(Pref.trashDelete, true)  // off = permanent, so nothing to undo
         var moves: [(URL, URL)] = []
         var refused: [String] = []
         for u in ps.flatMap(\.trash) {
@@ -221,5 +221,5 @@ final class Model: ObservableObject {
 }
 
 func applyDock() {
-    NSApp?.setActivationPolicy(pref("showDock", true) ? .regular : .accessory)
+    NSApp?.setActivationPolicy(pref(Pref.showDock, true) ? .regular : .accessory)
 }

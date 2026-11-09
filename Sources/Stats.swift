@@ -262,7 +262,7 @@ final class StatsStore: ObservableObject {
 
     /// One notification at 80% and one at 100% of the monthly budget.
     func checkBudget() {
-        guard let b = Double(setting("monthlyBudget")), b > 0, let c = monthCost else { return }
+        guard let b = Double(setting(Pref.monthlyBudget)), b > 0, let c = monthCost else { return }
         let key = "budgetAlert-" + monthPrefix
         let level = c.usd >= b ? 100 : c.usd >= b * 0.8 ? 80 : 0
         if level > UserDefaults.standard.integer(forKey: key) {
@@ -286,7 +286,7 @@ final class StatsStore: ObservableObject {
 
     /// Optional shared folder (iCloud Drive, Dropbox…): merge the file other Macs left there, then write ours back. Runs on `queue`.
     private func syncFile() {
-        let dir = setting("syncFolder")
+        let dir = setting(Pref.syncFolder)
         guard !dir.isEmpty else { return }
         let u = URL(fileURLWithPath: dir).appendingPathComponent("ai-shelf-stats.json")
         if let d = readCapped(u, max: maxImportBytes), let e = try? JSONDecoder().decode(StatsExport.self, from: d), e.version == 1,
@@ -308,7 +308,7 @@ final class StatsStore: ObservableObject {
 
     /// Recompute in the background; the list appears immediately and numbers fill in as batches finish.
     func refresh(_ projects: [Project]) {
-        guard pref("calcStats", true) else { return }
+        guard pref(Pref.calcStats, true) else { return }
         let sessions = projects.flatMap { p in (p.children ?? []).filter { statsAgents.contains($0.agent) && $0.sessionID != nil }.map { (p.path, $0) } }
         if sessions.isEmpty { return }
         computing = true

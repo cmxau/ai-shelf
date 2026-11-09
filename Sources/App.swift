@@ -3,11 +3,11 @@ import SwiftUI
 @main struct AIShelf: App {
     @ObservedObject var m = Model.shared
     @Environment(\.openWindow) var openWindow
-    @AppStorage("cli") var cli = "claude"
-    @AppStorage("terminal") var terminal = "Terminal"
-    @AppStorage("showCards") var showCards = true
-    @AppStorage("autoReload") var autoReload = false
-    @AppStorage("trashDelete") var trashDelete = true
+    @AppStorage(Pref.cli) var cli = "claude"
+    @AppStorage(Pref.terminal) var terminal = "Terminal"
+    @AppStorage(Pref.showCards) var showCards = true
+    @AppStorage(Pref.autoReload) var autoReload = false
+    @AppStorage(Pref.trashDelete) var trashDelete = true
     var body: some Scene { scenes.commands { commandItems } }
 
     @SceneBuilder var scenes: some Scene {

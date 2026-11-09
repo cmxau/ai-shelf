@@ -163,7 +163,9 @@ final class Model: ObservableObject {
         pending = []
         let toTrash = pref("trashDelete", true)  // off = permanent, so nothing to undo
         var moves: [(URL, URL)] = []
+        var refused: [String] = []
         for u in ps.flatMap(\.trash) {
+            guard insideHistoryRoots(u) else { refused.append(u.path); continue }
             if toTrash {
                 var out: NSURL?
                 if (try? FileManager.default.trashItem(at: u, resultingItemURL: &out)) != nil, let o = out { moves.append((u, o as URL)) }
@@ -172,9 +174,9 @@ final class Model: ObservableObject {
             }
         }
         var sql = ""
-        let ids = ps.flatMap(\.convIDs)
+        let ids = ps.flatMap(\.convIDs).filter(isSafeID)
         if !ids.isEmpty {
-            let list = "(" + ids.map { "'\($0)'" }.joined(separator: ",") + ")"
+            let list = "(" + ids.map(sqlQuote).joined(separator: ",") + ")"
             // keep the rows as INSERT statements so Undo can put them back
             if toTrash {
                 sql = String(
@@ -185,6 +187,7 @@ final class Model: ObservableObject {
         }
         if toTrash { undos.append(Undo(moves: moves, sql: sql)) }
         reload()
+        if !refused.isEmpty { error = "Left alone (outside the configured history folders): " + refused.prefix(3).joined(separator: ", ") }
     }
 
     func openSelected() { rows(selection).filter(\.exists).forEach(openProject) }
@@ -212,7 +215,7 @@ final class Model: ObservableObject {
     func undo() {
         guard let u = undos.popLast() else { return }
         for (from, to) in u.moves { try? FileManager.default.moveItem(at: to, to: from) }
-        if !u.sql.isEmpty { _ = sqlite(u.sql) }
+        if u.sql.hasPrefix("INSERT INTO conversation_summaries") { _ = sqlite(u.sql) }  // only ever our own replayed rows
         reload()
     }
 }

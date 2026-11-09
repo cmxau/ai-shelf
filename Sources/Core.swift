@@ -115,6 +115,42 @@ func diskSize(_ urls: [URL]) -> Int64 {
     return total
 }
 
+/// Whole-file read with a size cap (nil = missing or bigger than `max`), so a huge or hostile file can't exhaust memory.
+func readCapped(_ f: URL, max: Int) -> Data? {
+    guard let h = try? FileHandle(forReadingFrom: f) else { return nil }
+    defer { try? h.close() }
+    guard let d = try? h.read(upToCount: max + 1), d.count <= max else { return nil }
+    return d
+}
+
+/// Cache files hold project paths, so the folder is 0700 and files 0600.
+func privateWrite(_ d: Data, to u: URL) {
+    let fm = FileManager.default
+    try? fm.createDirectory(at: u.deletingLastPathComponent(), withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+    try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: cacheDir.path)
+    if (try? d.write(to: u, options: .atomic)) != nil { try? fm.setAttributes([.posixPermissions: 0o600], ofItemAtPath: u.path) }
+}
+
+/// Ids that name files (conversation ids, session ids) must be plain tokens: no separators, quotes or spaces.
+func isSafeID(_ s: String) -> Bool {
+    !s.isEmpty && s.utf8.count <= 128
+        && s.utf8.allSatisfy { ($0 >= 48 && $0 <= 57) || ($0 >= 65 && $0 <= 90) || ($0 >= 97 && $0 <= 122) || $0 == 45 || $0 == 95 || $0 == 46 }
+        && !s.hasPrefix(".")
+}
+
+/// SQL string literal: quotes doubled, NULs dropped.
+func sqlQuote(_ s: String) -> String { "'" + s.replacingOccurrences(of: "\u{0}", with: "").replacingOccurrences(of: "'", with: "''") + "'" }
+
+/// Deleting is only allowed for items directly or deeper inside a configured history folder (symlinks resolved on the parent, so a
+/// link can't point the delete elsewhere; the item itself is trashed/removed as a link, never followed).
+func insideHistoryRoots(_ u: URL) -> Bool {
+    let parent = u.deletingLastPathComponent().resolvingSymlinksInPath().path
+    return [claudeRoot, agyRoot, codexRoot, geminiRoot].contains { r in
+        let root = r.resolvingSymlinksInPath().path
+        return root != "/" && root != home.resolvingSymlinksInPath().path && (parent == root || parent.hasPrefix(root + "/"))
+    }
+}
+
 func read(_ f: URL, tail: Bool = false, _ n: Int = 512 << 10) -> String {
     guard let h = try? FileHandle(forReadingFrom: f) else { return "" }
     defer { try? h.close() }
@@ -143,7 +179,7 @@ func oneLine(_ s: String) -> String { String((s.split(separator: "\n").first ?? 
 func sqlite(_ sql: String..., json: Bool = false) -> Data {
     let p = Process(), out = Pipe()
     p.executableURL = URL(fileURLWithPath: "/usr/bin/sqlite3")
-    p.arguments = (json ? ["-json"] : []) + [agyRoot.appendingPathComponent("conversation_summaries.db").path] + sql
+    p.arguments = ["-safe"] + (json ? ["-json"] : []) + [agyRoot.appendingPathComponent("conversation_summaries.db").path] + sql
     p.standardOutput = out
     try? p.run()
     let d = out.fileHandleForReading.readDataToEndOfFile(); p.waitUntilExit(); return d

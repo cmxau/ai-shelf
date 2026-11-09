@@ -6,7 +6,12 @@ import UserNotifications
 // MARK: - Launching
 
 func sh(_ s: String) -> String { "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'" }
-func osa(_ s: String) -> String { s.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") }
+/// AppleScript string body. Control characters (a newline would run a second command in the terminal) become spaces.
+func osa(_ s: String) -> String {
+    String(s.unicodeScalars.map { $0.value < 32 || $0.value == 127 ? " " : Character($0) }).replacingOccurrences(of: "\\", with: "\\\\")
+        .replacingOccurrences(of: "\"", with: "\\\"")
+}
+func hasControl(_ s: String) -> Bool { s.unicodeScalars.contains { $0.value < 32 || $0.value == 127 } }
 func run(_ exe: String, _ args: [String]) { let p = Process(); p.executableURL = URL(fileURLWithPath: exe); p.arguments = args; try? p.run() }
 func osascript(_ lines: [String]) { run("/usr/bin/osascript", lines.flatMap { ["-e", $0] }) }
 
@@ -17,7 +22,12 @@ var checkedAgents: [String: Bool] = [:]
 func customAgents() -> [String] {
     setting("customAgents").split(whereSeparator: \.isNewline)
         .compactMap { $0.split(separator: " ").first.map(String.init) }
-        .filter { $0.allSatisfy { $0.isLetter || $0.isNumber || "-_.".contains($0) } && !builtinAgents.contains($0) }
+        .filter { isAgentName($0) && !builtinAgents.contains($0) }
+}
+/// A command name: ASCII letters, digits, "-", "_", "." (never a leading "-" or "."), so it can't be an option or carry shell syntax.
+func isAgentName(_ s: String) -> Bool {
+    s.utf8.count <= 64 && s.first.map { $0.isASCII && ($0.isLetter || $0.isNumber) } == true
+        && s.allSatisfy { $0.isASCII && ($0.isLetter || $0.isNumber || "-_.".contains($0)) }
 }
 func catalog() -> [String] { builtinAgents + customAgents() }
 func disabledAgents() -> Set<String> { Set(setting("disabledAgents").split(separator: ",").map(String.init)) }
@@ -28,7 +38,9 @@ func detectAgents(_ names: [String]) {
     guard !todo.isEmpty else { return }
     let p = Process(), out = Pipe()
     p.executableURL = URL(fileURLWithPath: "/bin/zsh")
-    p.arguments = ["-lic", "for a in \(todo.joined(separator: " ")); do command -v $a >/dev/null 2>&1 && echo \"HAVE $a\"; done"]
+    p.arguments = [
+        "-lic", "for a in \(todo.filter(isAgentName).map(sh).joined(separator: " ")); do command -v -- \"$a\" >/dev/null 2>&1 && echo \"HAVE $a\"; done",
+    ]
     p.standardOutput = out; p.standardError = FileHandle.nullDevice
     try? p.run()
     let text = String(decoding: out.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
@@ -59,8 +71,13 @@ let resumeFlag = ["claude": "--resume", "agy": "--conversation", "codex": "resum
 func openProject(_ p: Project) {
     let d = UserDefaults.standard
     let cli = !p.agent.isEmpty ? p.agent : d.string(forKey: "cli") ?? "claude"
+    // path and session id come from files on disk (a session's recorded cwd / id): refuse anything that isn't a plain absolute path / token
+    guard isAgentName(cli), p.path.hasPrefix("/"), !hasControl(p.path) else {
+        Model.shared.error = "Won't open: \(oneLine(p.path)) isn't a valid folder path."; return
+    }
     let flags = extraFlags(cli)
-    let cmd = cli + (flags.isEmpty ? "" : " " + flags) + (p.sessionID.flatMap { id in resumeFlag[cli].map { " \($0) \(id)" } } ?? "")
+    let resume = p.sessionID.flatMap { id in resumeFlag[cli].map { " \($0) \(sh(id))" } } ?? ""
+    let cmd = cli + (flags.isEmpty ? "" : " " + flags) + resume
     let line = "cd \(sh(p.path)) && \(cmd)"
     let inShell = ["zsh", "-lic", cmd]  // GUI apps lack the shell PATH, so go through a login shell
     switch d.string(forKey: "terminal") ?? "Terminal" {
@@ -98,7 +115,8 @@ func capture(_ exe: String, _ args: [String]) -> String {
 
 /// The conversation as (role, text) pairs, for Markdown export. nil = this agent's format can't be read (agy keeps conversations in binary DBs).
 func transcript(_ p: Project) -> [(String, String)]? {
-    guard p.sessionID != nil, let f = p.trash.first, let text = try? String(contentsOf: f, encoding: .utf8) else { return nil }
+    guard p.sessionID != nil, let f = p.trash.first, let data = readCapped(f, max: 256 << 20) else { return nil }
+    let text = String(decoding: data, as: UTF8.self)
     switch p.agent {
     case "claude": return text.split(separator: "\n").compactMap(msg).map { ($0.role, $0.text) }
     case "codex":

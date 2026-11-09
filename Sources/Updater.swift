@@ -43,7 +43,7 @@ final class Updater: ObservableObject {
             let o = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
             DispatchQueue.main.async {
                 self.busy = false
-                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: "lastUpdateCheck")
+                UserDefaults.standard.set(Date().timeIntervalSince1970, forKey: Pref.lastUpdateCheck)
                 guard code == 200, let o, let tag = o["tag_name"] as? String else {
                     if !silent {
                         self.status =
@@ -149,9 +149,9 @@ final class Updater: ObservableObject {
 
     /// Launch-time hook: check at most once a day when enabled; install straight away if that's enabled too.
     func launchCheck() {
-        guard pref("autoCheckUpdates", true) else { return }
-        let last = UserDefaults.standard.double(forKey: "lastUpdateCheck")
-        if Date().timeIntervalSince1970 - last > 86_400 { check(thenInstall: pref("autoInstallUpdates", false), silent: true) }
+        guard pref(Pref.autoCheckUpdates, true) else { return }
+        let last = UserDefaults.standard.double(forKey: Pref.lastUpdateCheck)
+        if Date().timeIntervalSince1970 - last > secondsPerDay { check(thenInstall: pref(Pref.autoInstallUpdates, false), silent: true) }
     }
 }
 

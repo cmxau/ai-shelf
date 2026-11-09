@@ -6,7 +6,7 @@ import SwiftUI
 /// "name-fragment input output cacheWrite cacheRead", USD per million tokens. The longest matching name wins.
 var userPricesMemo: (raw: String, table: [(String, [Double])]) = ("\u{0}", [])
 func userPrices() -> [(String, [Double])] {
-    let raw = setting("prices")
+    let raw = setting(Pref.prices)
     if raw != userPricesMemo.raw {
         userPricesMemo = (
             raw,
@@ -137,7 +137,7 @@ func parseGoogle(_ md: String, today: Date = Date()) -> [String: [Double]] {
                 let d = df.date(from: String(l[dr]))
             else { continue }
             sawDated = true
-            let inEffect = l[kr] == "through" ? today <= d.addingTimeInterval(86_400) : today >= d
+            let inEffect = l[kr] == "through" ? today <= d.addingTimeInterval(secondsPerDay) : today >= d
             if inEffect, valid == nil { valid = dollar(l) }
         }
         return sawDated ? valid : lines.first.flatMap(dollar)
@@ -187,7 +187,7 @@ final class PriceBook: ObservableObject {
     var rows: [PriceRow] { items.map { PriceRow(id: $0.key, src: $0.value.src, p: $0.value.p) }.sorted { ($0.src, $0.id) < ($1.src, $1.id) } }
 
     func refreshIfStale() {
-        if pref("autoPrices", true), fetched.map({ Date().timeIntervalSince($0) > 7 * 86_400 }) ?? true { refresh() }
+        if pref(Pref.autoPrices, true), fetched.map({ Date().timeIntervalSince($0) > 7 * secondsPerDay }) ?? true { refresh() }
     }
 
     /// Fetch every vendor in parallel. A vendor that fails keeps its previous prices, so a layout change on one page never wipes the rest.

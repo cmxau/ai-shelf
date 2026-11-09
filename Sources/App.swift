@@ -3,11 +3,11 @@ import SwiftUI
 @main struct AIShelf: App {
     @ObservedObject var m = Model.shared
     @Environment(\.openWindow) var openWindow
-    @AppStorage("cli") var cli = "claude"
-    @AppStorage("terminal") var terminal = "Terminal"
-    @AppStorage("showCards") var showCards = true
-    @AppStorage("autoReload") var autoReload = false
-    @AppStorage("trashDelete") var trashDelete = true
+    @AppStorage(Pref.cli) var cli = "claude"
+    @AppStorage(Pref.terminal) var terminal = "Terminal"
+    @AppStorage(Pref.showCards) var showCards = true
+    @AppStorage(Pref.autoReload) var autoReload = false
+    @AppStorage(Pref.trashDelete) var trashDelete = true
     var body: some Scene { scenes.commands { commandItems } }
 
     @SceneBuilder var scenes: some Scene {
@@ -56,17 +56,7 @@ import SwiftUI
         }
         CommandGroup(after: .toolbar) {
             Menu("Sort By") {
-                ForEach(RowSort.Field.allCases, id: \.self) { f in
-                    Button {
-                        m.sortBy(f)
-                    } label: {
-                        if let c = m.sortOrder.first, c.field == f {
-                            Label(f.title + (c.order == .forward ? "  ↑" : "  ↓"), systemImage: "checkmark")
-                        } else {
-                            Text(f.title)
-                        }
-                    }
-                }
+                SortButtons()
             }
             Picker("Agent", selection: $cli) {
                 Text("All agents").tag("all"); ForEach(m.agents, id: \.self) { Text($0).tag($0) }

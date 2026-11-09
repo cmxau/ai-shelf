@@ -77,6 +77,8 @@ struct RowSort: SortComparator {
     }
 }
 
+let secondsPerDay = 86_400.0
+
 let home = FileManager.default.homeDirectoryForCurrentUser
 
 let repoSlug = "cmxau/ai-shelf"
@@ -93,6 +95,43 @@ let cacheDir: URL = {
 
 // MARK: - Settings (all plain UserDefaults keys; the Settings window edits them through @AppStorage)
 
+/// Every UserDefaults key in one place (the Settings window edits them through @AppStorage), so a typo can't silently make a new setting.
+enum Pref {
+    static let cli = "cli"
+    static let terminal = "terminal"
+    static let defaultAgent = "defaultAgent"
+    static let defaultTerminal = "defaultTerminal"
+    static let openInTab = "openInTab"
+    static let confirmDelete = "confirmDelete"
+    static let trashDelete = "trashDelete"
+    static let autoReload = "autoReload"
+    static let columns = "columns"
+    static let menuCount = "menuCount"
+    static let showDock = "showDock"
+    static let disabledAgents = "disabledAgents"
+    static let customAgents = "customAgents"
+    static let agentFlags = "agentFlags"
+    static let claudeRoot = "claudeRoot"
+    static let agyRoot = "agyRoot"
+    static let codexRoot = "codexRoot"
+    static let geminiRoot = "geminiRoot"
+    static let calcStats = "calcStats"
+    static let showCards = "showCards"
+    static let prices = "prices"
+    static let autoPrices = "autoPrices"
+    static let hotkey = "hotkey"
+    static let notify = "notify"
+    static let monthlyBudget = "monthlyBudget"
+    static let syncFolder = "syncFolder"
+    static let statsGroup = "statsGroup"
+    static let autoCheckUpdates = "autoCheckUpdates"
+    static let autoInstallUpdates = "autoInstallUpdates"
+    static let lastUpdateCheck = "lastUpdateCheck"
+    static let pins = "pins"
+    static let notes = "notes"
+    static let columnsVersion = "columnsVersion"
+}
+
 extension String { var nonEmpty: String? { isEmpty ? nil : self } }
 func setting(_ k: String) -> String { UserDefaults.standard.string(forKey: k) ?? "" }
 func pref(_ k: String, _ fallback: Bool) -> Bool { UserDefaults.standard.object(forKey: k) as? Bool ?? fallback }
@@ -101,8 +140,8 @@ func folder(_ key: String, _ fallback: String) -> URL {
     let s = setting(key).trimmingCharacters(in: .whitespaces)
     return URL(fileURLWithPath: ((s.isEmpty ? fallback : s) as NSString).expandingTildeInPath)
 }
-var claudeRoot: URL { folder("claudeRoot", home.path + "/.claude/projects") }
-var agyRoot: URL { folder("agyRoot", home.path + "/.gemini/antigravity-cli") }
+var claudeRoot: URL { folder(Pref.claudeRoot, home.path + "/.claude/projects") }
+var agyRoot: URL { folder(Pref.agyRoot, home.path + "/.gemini/antigravity-cli") }
 
 func diskSize(_ urls: [URL]) -> Int64 {
     let keys: Set<URLResourceKey> = [.totalFileAllocatedSizeKey]

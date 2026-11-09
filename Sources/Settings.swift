@@ -3,8 +3,8 @@ import UniformTypeIdentifiers
 
 struct AboutView: View {
     @ObservedObject var u = Updater.shared
-    @AppStorage("autoCheckUpdates") var autoCheck = true
-    @AppStorage("autoInstallUpdates") var autoInstall = false
+    @AppStorage(Pref.autoCheckUpdates) var autoCheck = true
+    @AppStorage(Pref.autoInstallUpdates) var autoInstall = false
 
     var body: some View {
         ScrollView {
@@ -42,32 +42,32 @@ struct AboutView: View {
 
 struct SettingsView: View {
     @ObservedObject var m = Model.shared
-    @AppStorage("defaultAgent") var defaultAgent = "claude"
-    @AppStorage("defaultTerminal") var defaultTerminal = "Terminal"
-    @AppStorage("openInTab") var openInTab = false
-    @AppStorage("confirmDelete") var confirmDelete = true
-    @AppStorage("trashDelete") var trashDelete = true
-    @AppStorage("autoReload") var autoReload = false
-    @AppStorage("columns") var cols = TableColumnCustomization<Project>()
-    @AppStorage("menuCount") var menuCount = 10
-    @AppStorage("showDock") var showDock = true
-    @AppStorage("disabledAgents") var disabled = ""
-    @AppStorage("customAgents") var custom = ""
-    @AppStorage("agentFlags") var flags = ""
-    @AppStorage("claudeRoot") var claudePath = ""
-    @AppStorage("agyRoot") var agyPath = ""
-    @AppStorage("codexRoot") var codexPath = ""
-    @AppStorage("geminiRoot") var geminiPath = ""
-    @AppStorage("calcStats") var calcStats = true
-    @AppStorage("showCards") var showCards = true
+    @AppStorage(Pref.defaultAgent) var defaultAgent = "claude"
+    @AppStorage(Pref.defaultTerminal) var defaultTerminal = "Terminal"
+    @AppStorage(Pref.openInTab) var openInTab = false
+    @AppStorage(Pref.confirmDelete) var confirmDelete = true
+    @AppStorage(Pref.trashDelete) var trashDelete = true
+    @AppStorage(Pref.autoReload) var autoReload = false
+    @AppStorage(Pref.columns) var cols = TableColumnCustomization<Project>()
+    @AppStorage(Pref.menuCount) var menuCount = 10
+    @AppStorage(Pref.showDock) var showDock = true
+    @AppStorage(Pref.disabledAgents) var disabled = ""
+    @AppStorage(Pref.customAgents) var custom = ""
+    @AppStorage(Pref.agentFlags) var flags = ""
+    @AppStorage(Pref.claudeRoot) var claudePath = ""
+    @AppStorage(Pref.agyRoot) var agyPath = ""
+    @AppStorage(Pref.codexRoot) var codexPath = ""
+    @AppStorage(Pref.geminiRoot) var geminiPath = ""
+    @AppStorage(Pref.calcStats) var calcStats = true
+    @AppStorage(Pref.showCards) var showCards = true
     @ObservedObject var stats = StatsStore.shared
-    @AppStorage("prices") var prices = ""
+    @AppStorage(Pref.prices) var prices = ""
     @ObservedObject var book = PriceBook.shared
-    @AppStorage("autoPrices") var autoPrices = true
-    @AppStorage("hotkey") var hotkey = true
-    @AppStorage("notify") var notifyOn = true
-    @AppStorage("monthlyBudget") var budgetText = ""
-    @AppStorage("syncFolder") var syncFolder = ""
+    @AppStorage(Pref.autoPrices) var autoPrices = true
+    @AppStorage(Pref.hotkey) var hotkey = true
+    @AppStorage(Pref.notify) var notifyOn = true
+    @AppStorage(Pref.monthlyBudget) var budgetText = ""
+    @AppStorage(Pref.syncFolder) var syncFolder = ""
 
     var body: some View {
         TabView {
@@ -146,7 +146,7 @@ struct SettingsView: View {
 
     var usageTab: some View {
         Form {
-            Section("Token stats (Claude)") {
+            Section("Token stats") {
                 Toggle("Calculate token usage (reads each session file once, then cached)", isOn: $calcStats)
                 Toggle("Show statistics cards at the top of the window", isOn: $showCards)
             }
@@ -161,8 +161,8 @@ struct SettingsView: View {
             }
             Section("Statistics data") {
                 HStack {
-                    Button("Export…") { exportStats() }
-                    Button("Import…") { importStats() }
+                    Button("Export…") { exportStatsPanel() }
+                    Button("Import…") { importStatsPanel() }
                 }
                 Text(
                     stats.dataStatus.isEmpty
@@ -220,9 +220,6 @@ struct SettingsView: View {
             }
         }
     }
-
-    func exportStats() { exportStatsPanel() }
-    func importStats() { importStatsPanel() }
 
     func enabled(_ a: String) -> Binding<Bool> {
         Binding(

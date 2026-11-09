@@ -4,13 +4,13 @@ import SwiftUI
 
 struct ContentView: View {
     @ObservedObject var m = Model.shared
-    @AppStorage("cli") var cli = "claude"
-    @AppStorage("terminal") var terminal = "Terminal"
-    @AppStorage("autoReload") var autoReload = false
-    @AppStorage("trashDelete") var trashDelete = true
-    @AppStorage("showCards") var showCards = true
-    @AppStorage("columns") var cols = TableColumnCustomization<Project>()  // visibility + order, edited from the column headers
-    @AppStorage("prices") var prices = ""  // only here so cost cells refresh when prices change
+    @AppStorage(Pref.cli) var cli = "claude"
+    @AppStorage(Pref.terminal) var terminal = "Terminal"
+    @AppStorage(Pref.autoReload) var autoReload = false
+    @AppStorage(Pref.trashDelete) var trashDelete = true
+    @AppStorage(Pref.showCards) var showCards = true
+    @AppStorage(Pref.columns) var cols = TableColumnCustomization<Project>()  // visibility + order, edited from the column headers
+    @AppStorage(Pref.prices) var prices = ""  // only here so cost cells refresh when prices change
     @ObservedObject var stats = StatsStore.shared
     @ObservedObject var book = PriceBook.shared
     @Environment(\.openWindow) var openWindow
@@ -145,17 +145,7 @@ struct ContentView: View {
                     Label("Reload", systemImage: "arrow.clockwise")
                 }.help("Reload")
                 Menu {
-                    ForEach(RowSort.Field.allCases, id: \.self) { f in
-                        Button {
-                            m.sortBy(f)
-                        } label: {
-                            if let c = m.sortOrder.first, c.field == f {
-                                Label(f.title + (c.order == .forward ? "  ↑" : "  ↓"), systemImage: "checkmark")
-                            } else {
-                                Text(f.title)
-                            }
-                        }
-                    }
+                    SortButtons()
                 } label: {
                     Label("Sort", systemImage: "arrow.up.arrow.down")
                 }.help("Sort by…")
@@ -189,12 +179,13 @@ struct ContentView: View {
             }
             .sharedBackgroundVisibility(m.searchOpen ? .hidden : .automatic)
         }
-        .onAppear {  // saved choice may no longer be installed
+        .onAppear {
             NSApp.setActivationPolicy(.regular)  // an open window always gets a menu bar, even with "Show Dock icon" off
             NSApp.activate(ignoringOtherApps: true)
-            if UserDefaults.standard.integer(forKey: "columnsVersion") < 3 {
-                cols = TableColumnCustomization(); UserDefaults.standard.set(3, forKey: "columnsVersion")
+            if UserDefaults.standard.integer(forKey: Pref.columnsVersion) < 3 {
+                cols = TableColumnCustomization(); UserDefaults.standard.set(3, forKey: Pref.columnsVersion)
             }
+            // a saved choice may no longer be installed
             if cli != "all" && !m.agents.contains(cli) { cli = m.agents.first ?? "all" }
             if !terminals.contains(terminal) { terminal = "Terminal" }
         }
@@ -306,4 +297,22 @@ struct ContentView: View {
     func reveal(_ ids: Set<String>) { m.selection = ids; m.revealSelected() }
     func copy(_ ids: Set<String>) { m.selection = ids; m.copySelected() }
     func fix(_ ids: Set<String>) { m.selection = ids; m.fixSelected() }
+}
+
+/// The Sort menu's items (shared by the menu bar and the toolbar): the active field shows a check and its direction.
+struct SortButtons: View {
+    @ObservedObject var m = Model.shared
+    var body: some View {
+        ForEach(RowSort.Field.allCases, id: \.self) { f in
+            Button {
+                m.sortBy(f)
+            } label: {
+                if let c = m.sortOrder.first, c.field == f {
+                    Label(f.title + (c.order == .forward ? "  ↑" : "  ↓"), systemImage: "checkmark")
+                } else {
+                    Text(f.title)
+                }
+            }
+        }
+    }
 }

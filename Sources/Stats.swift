@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Usage stats (Claude only: its session files record token usage per message)
+// MARK: - Usage stats (Claude, Codex and Gemini session files record token usage; Antigravity does not)
 
 struct Usage: Codable {
     var input = 0, output = 0, cacheWrite = 0, cacheRead = 0
@@ -99,7 +99,7 @@ func scan(_ url: URL, size: Int, mtime: Double) -> FileStats {
     let nUsage = Data("\"usage\"".utf8), nAsst = Data("\"type\":\"assistant\"".utf8)
     fs.first = lines.lazy.compactMap(tsOf).first
     fs.last = lines.reversed().lazy.compactMap(tsOf).first
-    var best: [String: (model: String, u: Usage, ts: Double)] = [:]
+    var best: [String: Billed] = [:]
     for line in lines where line.range(of: nUsage) != nil && line.range(of: nAsst) != nil {
         guard let o = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
             let m = o["message"] as? [String: Any], let u = m["usage"] as? [String: Any],
@@ -112,15 +112,14 @@ func scan(_ url: URL, size: Int, mtime: Double) -> FileStats {
         if let e = best[id], e.u.output >= usage.output { continue }
         best[id] = (model, usage, (o["timestamp"] as? String).flatMap(epoch) ?? fs.first ?? 0)
     }
-    for (_, e) in best {
-        fs.days[dayFmt.string(from: Date(timeIntervalSince1970: e.ts)), default: [:]][e.model, default: Usage()] += e.u
-        fs.models[e.model, default: Usage()] += e.u
-        fs.total += e.u
-    }
+    fold(&fs, Array(best.values))
     return fs
 }
 
-func fold(_ fs: inout FileStats, _ items: [(model: String, u: Usage, ts: Double)]) {
+/// One billed assistant message: model, its tokens, when.
+typealias Billed = (model: String, u: Usage, ts: Double)
+
+func fold(_ fs: inout FileStats, _ items: [Billed]) {
     for e in items {
         fs.days[dayFmt.string(from: Date(timeIntervalSince1970: e.ts)), default: [:]][e.model, default: Usage()] += e.u
         fs.models[e.model, default: Usage()] += e.u
@@ -138,7 +137,7 @@ func scanCodex(_ url: URL, size: Int, mtime: Double) -> FileStats {
     fs.first = lines.lazy.compactMap(tsOf).first; fs.last = lines.reversed().lazy.compactMap(tsOf).first
     let nTok = Data("\"token_count\"".utf8), nCtx = Data("\"turn_context\"".utf8)
     var model = "unknown", prev = (i: 0, c: 0, w: 0, o: 0)
-    var items: [(model: String, u: Usage, ts: Double)] = []
+    var items: [Billed] = []
     for line in lines {
         let isTok = line.range(of: nTok) != nil, isCtx = line.range(of: nCtx) != nil
         guard isTok || isCtx, let o = try? JSONSerialization.jsonObject(with: line) as? [String: Any], let p = o["payload"] as? [String: Any] else { continue }
@@ -179,7 +178,7 @@ func scanGemini(_ url: URL, size: Int, mtime: Double) -> FileStats {
         let needle = Data("\"tokens\"".utf8)
         recs = lines.filter { $0.range(of: needle) != nil }.compactMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
     }
-    var best: [String: (model: String, u: Usage, ts: Double)] = [:]
+    var best: [String: Billed] = [:]
     for r in recs {
         guard r["type"] as? String == "gemini", let t = r["tokens"] as? [String: Any] else { continue }
         let cached = t["cached"] as? Int ?? 0
@@ -202,12 +201,11 @@ func scanFile(_ url: URL, agent: String, size: Int, mtime: Double) -> FileStats 
 
 final class StatsStore: ObservableObject {
     static let shared = StatsStore()
-    @Published var bySession: [String: FileStats] = [:]  // Project.id of a claude session -> totals (incl. its subagents)
+    @Published var bySession: [String: FileStats] = [:]  // Project.id of a session -> totals (incl. a Claude session's subagents)
     @Published var computing = false
     @Published var ledger: [String: FileStats] = [:] { didSet { lifetime = Lifetime(ledger) } }  // every session file ever scanned
     @Published var lifetime = Lifetime()
     @Published var dataStatus = ""
-    var info: [String: String] = [:]  // session id -> project path
     private var cache: [String: FileStats] = [:]  // file path -> stats, keyed by size + mtime; touched only on `queue`
     private let queue = DispatchQueue(label: "stats", qos: .utility)
     private let cacheURL = cacheDir.appendingPathComponent("stats-v2.json")
@@ -267,7 +265,7 @@ final class StatsStore: ObservableObject {
 
     /// One notification at 80% and one at 100% of the monthly budget.
     func checkBudget() {
-        guard let b = Double(setting("monthlyBudget")), b > 0, let c = monthCost else { return }
+        guard let b = Double(setting(Pref.monthlyBudget)), b > 0, let c = monthCost else { return }
         let key = "budgetAlert-" + monthPrefix
         let level = c.usd >= b ? 100 : c.usd >= b * 0.8 ? 80 : 0
         if level > UserDefaults.standard.integer(forKey: key) {
@@ -291,7 +289,7 @@ final class StatsStore: ObservableObject {
 
     /// Optional shared folder (iCloud Drive, Dropbox…): merge the file other Macs left there, then write ours back. Runs on `queue`.
     private func syncFile() {
-        let dir = setting("syncFolder")
+        let dir = setting(Pref.syncFolder)
         guard !dir.isEmpty else { return }
         let u = URL(fileURLWithPath: dir).appendingPathComponent("ai-shelf-stats.json")
         if let d = readCapped(u, max: maxImportBytes), let e = try? JSONDecoder().decode(StatsExport.self, from: d), e.version == 1,
@@ -313,10 +311,9 @@ final class StatsStore: ObservableObject {
 
     /// Recompute in the background; the list appears immediately and numbers fill in as batches finish.
     func refresh(_ projects: [Project]) {
-        guard pref("calcStats", true) else { return }
+        guard pref(Pref.calcStats, true) else { return }
         let sessions = projects.flatMap { p in (p.children ?? []).filter { statsAgents.contains($0.agent) && $0.sessionID != nil }.map { (p.path, $0) } }
         if sessions.isEmpty { return }
-        info = Dictionary(sessions.map { ($0.1.id, $0.0) }, uniquingKeysWith: { a, _ in a })
         computing = true
         queue.async {
             var batch: [String: FileStats] = [:], first = true

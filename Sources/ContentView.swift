@@ -28,52 +28,124 @@ struct ContentView: View {
         return sorted.filter { m.pins.contains($0.path) } + sorted.filter { !m.pins.contains($0.path) }  // pinned projects stay on top
     }
 
-    var body: some View {
+    func table(_ data: [Project], _ number: [String: String]) -> some View {
+        Table(data, children: \.children, selection: $m.selection, sortOrder: $m.sortOrder, columnCustomization: $cols) {
+            TableColumn("Project / Session", sortUsing: RowSort(.name)) { nameCell($0) }.customizationID("name").disabledCustomizationBehavior(.visibility)
+            TableColumn("#") { Text(number[$0.id] ?? "") }.width(36).customizationID("num")
+            TableColumn("Agent", sortUsing: RowSort(.agent)) { Text($0.agentLabel) }.width(100).customizationID("agent")
+            TableColumn("Sessions", sortUsing: RowSort(.sessions)) { Text($0.sessionID == nil ? "\($0.sessions)" : "") }.width(60).customizationID(
+                "sessions")
+            TableColumn("Tokens", sortUsing: RowSort(.tokens)) { Text(tokens($0)).monospacedDigit() }.width(65).customizationID("tokens")
+            TableColumn("Model", sortUsing: RowSort(.model)) { Text(modelName($0)).lineLimit(1) }.width(130).customizationID("model").defaultVisibility(
+                .hidden)
+            TableColumn("Est. cost", sortUsing: RowSort(.cost)) { Text(costText($0)).monospacedDigit() }.width(70).customizationID("cost")
+            Group {
+                TableColumn("Size", sortUsing: RowSort(.size)) {
+                    Text($0.size == 0 ? "" : ByteCountFormatter.string(fromByteCount: $0.size, countStyle: .file))
+                }.width(70).customizationID("size")
+                TableColumn("Last used", sortUsing: RowSort(.when)) { Text(when($0)) }.width(110).customizationID("when")
+                TableColumn("Note") { noteCell($0) }.width(140).customizationID("note")
+                TableColumn("Status") { flag($0) }.width(70).customizationID("status").disabledCustomizationBehavior(.all)
+            }
+        }
+        .contextMenu(forSelectionType: String.self) { ids in
+            if !ids.isEmpty {
+                Button("Open in Terminal") { open(ids) }
+                Button("Show in Finder") { reveal(ids) }
+                Button("Copy Path") { copy(ids) }
+                Button("Fix Path…") { fix(ids) }
+                Divider()
+                Button(pinLabel(ids)) {
+                    m.selection = ids; m.togglePin()
+                }
+                Button("Edit Note…") {
+                    m.selection = ids; m.editNote()
+                }
+                Button("Export as Markdown…") {
+                    m.selection = ids; m.exportSelected()
+                }
+                Divider()
+                Button("Delete…", role: .destructive) { m.ask(ids) }
+            }
+        } primaryAction: {
+            open($0)
+        }
+    }
+
+    @ToolbarContentBuilder var toolbarItems: some ToolbarContent {
+        ToolbarItem {
+            Picker("Agent", selection: $cli) {
+                Text("All agents").tag("all"); ForEach(m.agents, id: \.self) { Text($0).tag($0) }
+            }
+            .padding(.horizontal, 10)
+        }
+        ToolbarSpacer(.fixed)
+        ToolbarItem {
+            Picker("Terminal", selection: $terminal) { ForEach(terminals, id: \.self) { Text($0).tag($0) } }
+                .padding(.horizontal, 10)
+        }
+        ToolbarSpacer(.fixed)
+        ToolbarItemGroup {
+            Button {
+                open(m.selection)
+            } label: {
+                Label("Open in Terminal", systemImage: "terminal")
+            }
+            .help("Open in Terminal").disabled(m.selection.isEmpty)
+            Button {
+                fix(m.selection)
+            } label: {
+                Label("Fix Path", systemImage: "folder.badge.gearshape")
+            }
+            .help("Fix Path…").disabled(m.selection.isEmpty || cli != "claude")
+        }
+        ToolbarSpacer(.fixed)
+        ToolbarItemGroup {
+            Button {
+                m.ask(m.selection)
+            } label: {
+                Label("Delete", systemImage: "trash")
+            }
+            .help(trashDelete ? "Move to Trash" : "Delete permanently").disabled(m.selection.isEmpty || !hasHistory)
+            Button {
+                m.request(m.projects.filter { !$0.exists })
+            } label: {
+                Label("Delete Missing", systemImage: "questionmark.folder")
+            }
+            .help("Delete all projects whose folder is missing").disabled(!hasHistory || m.projects.allSatisfy(\.exists))
+            Button {
+                m.undo()
+            } label: {
+                Label("Undo Delete", systemImage: "arrow.uturn.backward")
+            }
+            .help("Undo last delete").disabled(m.undos.isEmpty)
+        }
+        ToolbarSpacer(.fixed)
+        ToolbarItemGroup {
+            Button {
+                m.reload()
+            } label: {
+                Label("Reload", systemImage: "arrow.clockwise")
+            }.help("Reload")
+            Menu {
+                SortButtons()
+            } label: {
+                Label("Sort", systemImage: "arrow.up.arrow.down")
+            }.help("Sort by…")
+            Button {
+                openWindow(id: "stats")
+            } label: {
+                Label("Usage Stats", systemImage: "chart.bar")
+            }.help("Usage stats")
+        }
+    }
+
+    @ViewBuilder var mainContent: some View {
         let data = visible  // sorted once per render, not once per cell
         let number = Dictionary(uniqueKeysWithValues: data.enumerated().map { ($1.id, String($0 + 1)) })
         VStack(spacing: 0) {
             if showCards { StatsCards().padding(.horizontal, 12).padding(.top, 6).padding(.bottom, 10) }
-            Table(data, children: \.children, selection: $m.selection, sortOrder: $m.sortOrder, columnCustomization: $cols) {
-                TableColumn("Project / Session", sortUsing: RowSort(.name)) { nameCell($0) }.customizationID("name").disabledCustomizationBehavior(.visibility)
-                TableColumn("#") { Text(number[$0.id] ?? "") }.width(36).customizationID("num")
-                TableColumn("Agent", sortUsing: RowSort(.agent)) { Text($0.agentLabel) }.width(100).customizationID("agent")
-                TableColumn("Sessions", sortUsing: RowSort(.sessions)) { Text($0.sessionID == nil ? "\($0.sessions)" : "") }.width(60).customizationID(
-                    "sessions")
-                TableColumn("Tokens", sortUsing: RowSort(.tokens)) { Text(tokens($0)).monospacedDigit() }.width(65).customizationID("tokens")
-                TableColumn("Model", sortUsing: RowSort(.model)) { Text(modelName($0)).lineLimit(1) }.width(130).customizationID("model").defaultVisibility(
-                    .hidden)
-                TableColumn("Est. cost", sortUsing: RowSort(.cost)) { Text(costText($0)).monospacedDigit() }.width(70).customizationID("cost")
-                Group {
-                    TableColumn("Size", sortUsing: RowSort(.size)) {
-                        Text($0.size == 0 ? "" : ByteCountFormatter.string(fromByteCount: $0.size, countStyle: .file))
-                    }.width(70).customizationID("size")
-                    TableColumn("Last used", sortUsing: RowSort(.when)) { Text(when($0)) }.width(110).customizationID("when")
-                    TableColumn("Note") { noteCell($0) }.width(140).customizationID("note")
-                    TableColumn("Status") { flag($0) }.width(70).customizationID("status").disabledCustomizationBehavior(.all)
-                }
-            }
-            .contextMenu(forSelectionType: String.self) { ids in
-                if !ids.isEmpty {
-                    Button("Open in Terminal") { open(ids) }
-                    Button("Show in Finder") { reveal(ids) }
-                    Button("Copy Path") { copy(ids) }
-                    Button("Fix Path…") { fix(ids) }
-                    Divider()
-                    Button(pinLabel(ids)) {
-                        m.selection = ids; m.togglePin()
-                    }
-                    Button("Edit Note…") {
-                        m.selection = ids; m.editNote()
-                    }
-                    Button("Export as Markdown…") {
-                        m.selection = ids; m.exportSelected()
-                    }
-                    Divider()
-                    Button("Delete…", role: .destructive) { m.ask(ids) }
-                }
-            } primaryAction: {
-                open($0)
-            }
+            table(data, number)
 
             if !details.isEmpty {
                 Divider()
@@ -84,131 +156,71 @@ struct ContentView: View {
                 }.frame(height: 190)
             }
         }
-        .toolbar {
-            ToolbarItem {
-                Picker("Agent", selection: $cli) {
-                    Text("All agents").tag("all"); ForEach(m.agents, id: \.self) { Text($0).tag($0) }
-                }
-                .padding(.horizontal, 10)
-            }
-            ToolbarSpacer(.fixed)
-            ToolbarItem {
-                Picker("Terminal", selection: $terminal) { ForEach(terminals, id: \.self) { Text($0).tag($0) } }
-                    .padding(.horizontal, 10)
-            }
-            ToolbarSpacer(.fixed)
-            ToolbarItemGroup {
-                Button {
-                    open(m.selection)
-                } label: {
-                    Label("Open in Terminal", systemImage: "terminal")
-                }
-                .help("Open in Terminal").disabled(m.selection.isEmpty)
-                Button {
-                    fix(m.selection)
-                } label: {
-                    Label("Fix Path", systemImage: "folder.badge.gearshape")
-                }
-                .help("Fix Path…").disabled(m.selection.isEmpty || cli != "claude")
-            }
-            ToolbarSpacer(.fixed)
-            ToolbarItemGroup {
-                Button {
-                    m.ask(m.selection)
-                } label: {
-                    Label("Delete", systemImage: "trash")
-                }
-                .help(trashDelete ? "Move to Trash" : "Delete permanently").disabled(m.selection.isEmpty || !hasHistory)
-                Button {
-                    m.request(m.projects.filter { !$0.exists })
-                } label: {
-                    Label("Delete Missing", systemImage: "questionmark.folder")
-                }
-                .help("Delete all projects whose folder is missing").disabled(!hasHistory || m.projects.allSatisfy(\.exists))
-                Button {
-                    m.undo()
-                } label: {
-                    Label("Undo Delete", systemImage: "arrow.uturn.backward")
-                }
-                .help("Undo last delete").disabled(m.undos.isEmpty)
-            }
-            ToolbarSpacer(.fixed)
-            ToolbarItemGroup {
-                Button {
-                    m.reload()
-                } label: {
-                    Label("Reload", systemImage: "arrow.clockwise")
-                }.help("Reload")
-                Menu {
-                    SortButtons()
-                } label: {
-                    Label("Sort", systemImage: "arrow.up.arrow.down")
-                }.help("Sort by…")
-                Button {
-                    openWindow(id: "stats")
-                } label: {
-                    Label("Usage Stats", systemImage: "chart.bar")
-                }.help("Usage stats")
-            }
-            ToolbarSpacer(.flexible)
-            ToolbarItem {
-                if m.searchOpen {
-                    HStack(spacing: 6) {
-                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
-                        TextField("Search", text: $m.query).textFieldStyle(.plain).focused($focused)
-                            .onExitCommand { closeSearch(force: true) }
-                            .onChange(of: focused) { if !focused { closeSearch(force: false) } }
-                            .onAppear { focused = true }
+    }
+
+    var body: some View {
+        mainContent
+            .toolbar {
+                toolbarItems
+                ToolbarSpacer(.flexible)
+                ToolbarItem {
+                    if m.searchOpen {
+                        HStack(spacing: 6) {
+                            Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                            TextField("Search", text: $m.query).textFieldStyle(.plain).focused($focused)
+                                .onExitCommand { closeSearch(force: true) }
+                                .onChange(of: focused) { if !focused { closeSearch(force: false) } }
+                                .onAppear { focused = true }
+                        }
+                        .padding(.horizontal, 10).frame(width: 200, height: 28)
+                        .glassEffect(.regular.interactive(), in: Capsule())
+                        .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.85), lineWidth: 3).opacity(focused ? 1 : 0))
+                    } else {
+                        Button {
+                            m.searchOpen = true
+                        } label: {
+                            Label("Search", systemImage: "magnifyingglass")
+                        }
+                        .help("Search").keyboardShortcut("f", modifiers: .command)
                     }
-                    .padding(.horizontal, 10).frame(width: 200, height: 28)
-                    .glassEffect(.regular.interactive(), in: Capsule())
-                    .overlay(Capsule().strokeBorder(Color.accentColor.opacity(0.85), lineWidth: 3).opacity(focused ? 1 : 0))
-                } else {
-                    Button {
-                        m.searchOpen = true
-                    } label: {
-                        Label("Search", systemImage: "magnifyingglass")
-                    }
-                    .help("Search").keyboardShortcut("f", modifiers: .command)
                 }
+                .sharedBackgroundVisibility(m.searchOpen ? .hidden : .automatic)
             }
-            .sharedBackgroundVisibility(m.searchOpen ? .hidden : .automatic)
-        }
-        .onAppear {
-            NSApp.setActivationPolicy(.regular)  // an open window always gets a menu bar, even with "Show Dock icon" off
-            NSApp.activate(ignoringOtherApps: true)
-            if UserDefaults.standard.integer(forKey: Pref.columnsVersion) < 3 {
-                cols = TableColumnCustomization(); UserDefaults.standard.set(3, forKey: Pref.columnsVersion)
+            .onAppear {
+                NSApp.setActivationPolicy(.regular)  // an open window always gets a menu bar, even with "Show Dock icon" off
+                NSApp.activate(ignoringOtherApps: true)
+                if UserDefaults.standard.integer(forKey: Pref.columnsVersion) < 3 {
+                    cols = TableColumnCustomization(); UserDefaults.standard.set(3, forKey: Pref.columnsVersion)
+                }
+                // a saved choice may no longer be installed
+                if cli != "all" && !m.agents.contains(cli) { cli = m.agents.first ?? "all" }
+                if !terminals.contains(terminal) { terminal = "Terminal" }
             }
-            // a saved choice may no longer be installed
-            if cli != "all" && !m.agents.contains(cli) { cli = m.agents.first ?? "all" }
-            if !terminals.contains(terminal) { terminal = "Terminal" }
-        }
-        .onChange(of: cli) { m.reload() }
-        .onChange(of: m.query) { m.searchContent() }
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
-            DispatchQueue.main.async { applyDock() }  // back to menu-bar-only if the Dock icon is turned off
-        }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in if autoReload { m.reload() } }
-        .onChange(of: m.selection) { m.updatePreview() }
-        .alert("Note", isPresented: Binding(get: { m.noteKey != nil }, set: { if !$0 { m.noteKey = nil } })) {
-            TextField("Note", text: $m.noteDraft)
-            Button("Save") { m.saveNote() }
-            Button("Cancel", role: .cancel) {}
-        }
-        .alert("AI Shelf", isPresented: Binding(get: { m.error != nil }, set: { _ in m.error = nil })) {
-        } message: {
-            Text(m.error ?? "")
-        }
-        .confirmationDialog(
-            trashDelete ? "Move \(m.pending.count) item(s) to Trash?" : "Permanently delete \(m.pending.count) item(s)?",
-            isPresented: Binding(get: { !m.pending.isEmpty }, set: { if !$0 { m.pending = [] } }),
-            presenting: m.pending.isEmpty ? nil : m.pending
-        ) { ps in
-            Button(trashDelete ? "Move to Trash" : "Delete Permanently", role: .destructive) { m.delete(ps) }
-        } message: { _ in
-            Text("Only saved conversations are removed, never your code." + (trashDelete ? " Undo is in the toolbar." : " This can't be undone."))
-        }
+            .onChange(of: cli) { m.reload() }
+            .onChange(of: m.query) { m.searchContent() }
+            .onReceive(NotificationCenter.default.publisher(for: NSWindow.willCloseNotification)) { _ in
+                DispatchQueue.main.async { applyDock() }  // back to menu-bar-only if the Dock icon is turned off
+            }
+            .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in if autoReload { m.reload() } }
+            .onChange(of: m.selection) { m.updatePreview() }
+            .alert("Note", isPresented: Binding(get: { m.noteKey != nil }, set: { if !$0 { m.noteKey = nil } })) {
+                TextField("Note", text: $m.noteDraft)
+                Button("Save") { m.saveNote() }
+                Button("Cancel", role: .cancel) {}
+            }
+            .alert("AI Shelf", isPresented: Binding(get: { m.error != nil }, set: { _ in m.error = nil })) {
+            } message: {
+                Text(m.error ?? "")
+            }
+            .confirmationDialog(
+                trashDelete ? "Move \(m.pending.count) item(s) to Trash?" : "Permanently delete \(m.pending.count) item(s)?",
+                isPresented: Binding(get: { !m.pending.isEmpty }, set: { if !$0 { m.pending = [] } }),
+                presenting: m.pending.isEmpty ? nil : m.pending
+            ) { ps in
+                Button(trashDelete ? "Move to Trash" : "Delete Permanently", role: .destructive) { m.delete(ps) }
+            } message: { _ in
+                Text("Only saved conversations are removed, never your code." + (trashDelete ? " Undo is in the toolbar." : " This can't be undone."))
+            }
     }
 
     /// Collapse back to the magnifier like Finder: Esc always, click-away only when the field is empty.

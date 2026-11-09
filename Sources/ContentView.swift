@@ -75,16 +75,11 @@ struct ContentView: View {
                 open($0)
             }
 
-            if !(m.preview + usageLines).isEmpty {
+            if !details.isEmpty {
                 Divider()
                 ScrollView {
                     VStack(alignment: .leading, spacing: 8) {
-                        ForEach(m.preview + usageLines, id: \.0) { l in
-                            VStack(alignment: .leading) {
-                                Text(l.0).font(.caption).foregroundStyle(.secondary)
-                                Text(l.1).textSelection(.enabled)
-                            }
-                        }
+                        ForEach(details, id: \.0) { detailRow($0) }
                     }.frame(maxWidth: .infinity, alignment: .leading).padding(10)
                 }.frame(height: 190)
             }
@@ -238,6 +233,15 @@ struct ContentView: View {
     func costText(_ p: Project) -> String { stats.summary(p).map { money(cost($0.models)) } ?? "" }
 
     /// Usage details for the single selected row (session or whole project).
+    var details: [(String, String)] { m.preview + usageLines }
+
+    func detailRow(_ l: (String, String)) -> some View {
+        VStack(alignment: .leading) {
+            Text(l.0).font(.caption).foregroundStyle(.secondary)
+            Text(l.1).textSelection(.enabled)
+        }
+    }
+
     var usageLines: [(String, String)] {
         guard m.selection.count == 1, let p = m.rows(m.selection).first, let s = stats.summary(p) else { return [] }
         let u = s.total

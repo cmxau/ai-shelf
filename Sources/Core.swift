@@ -77,6 +77,8 @@ struct RowSort: SortComparator {
     }
 }
 
+let secondsPerDay = 86_400.0
+
 let home = FileManager.default.homeDirectoryForCurrentUser
 
 let repoSlug = "cmxau/ai-shelf"

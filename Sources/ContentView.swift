@@ -145,17 +145,7 @@ struct ContentView: View {
                     Label("Reload", systemImage: "arrow.clockwise")
                 }.help("Reload")
                 Menu {
-                    ForEach(RowSort.Field.allCases, id: \.self) { f in
-                        Button {
-                            m.sortBy(f)
-                        } label: {
-                            if let c = m.sortOrder.first, c.field == f {
-                                Label(f.title + (c.order == .forward ? "  ↑" : "  ↓"), systemImage: "checkmark")
-                            } else {
-                                Text(f.title)
-                            }
-                        }
-                    }
+                    SortButtons()
                 } label: {
                     Label("Sort", systemImage: "arrow.up.arrow.down")
                 }.help("Sort by…")
@@ -307,4 +297,22 @@ struct ContentView: View {
     func reveal(_ ids: Set<String>) { m.selection = ids; m.revealSelected() }
     func copy(_ ids: Set<String>) { m.selection = ids; m.copySelected() }
     func fix(_ ids: Set<String>) { m.selection = ids; m.fixSelected() }
+}
+
+/// The Sort menu's items (shared by the menu bar and the toolbar): the active field shows a check and its direction.
+struct SortButtons: View {
+    @ObservedObject var m = Model.shared
+    var body: some View {
+        ForEach(RowSort.Field.allCases, id: \.self) { f in
+            Button {
+                m.sortBy(f)
+            } label: {
+                if let c = m.sortOrder.first, c.field == f {
+                    Label(f.title + (c.order == .forward ? "  ↑" : "  ↓"), systemImage: "checkmark")
+                } else {
+                    Text(f.title)
+                }
+            }
+        }
+    }
 }

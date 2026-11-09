@@ -99,7 +99,7 @@ func scan(_ url: URL, size: Int, mtime: Double) -> FileStats {
     let nUsage = Data("\"usage\"".utf8), nAsst = Data("\"type\":\"assistant\"".utf8)
     fs.first = lines.lazy.compactMap(tsOf).first
     fs.last = lines.reversed().lazy.compactMap(tsOf).first
-    var best: [String: (model: String, u: Usage, ts: Double)] = [:]
+    var best: [String: Billed] = [:]
     for line in lines where line.range(of: nUsage) != nil && line.range(of: nAsst) != nil {
         guard let o = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
             let m = o["message"] as? [String: Any], let u = m["usage"] as? [String: Any],
@@ -116,7 +116,10 @@ func scan(_ url: URL, size: Int, mtime: Double) -> FileStats {
     return fs
 }
 
-func fold(_ fs: inout FileStats, _ items: [(model: String, u: Usage, ts: Double)]) {
+/// One billed assistant message: model, its tokens, when.
+typealias Billed = (model: String, u: Usage, ts: Double)
+
+func fold(_ fs: inout FileStats, _ items: [Billed]) {
     for e in items {
         fs.days[dayFmt.string(from: Date(timeIntervalSince1970: e.ts)), default: [:]][e.model, default: Usage()] += e.u
         fs.models[e.model, default: Usage()] += e.u
@@ -134,7 +137,7 @@ func scanCodex(_ url: URL, size: Int, mtime: Double) -> FileStats {
     fs.first = lines.lazy.compactMap(tsOf).first; fs.last = lines.reversed().lazy.compactMap(tsOf).first
     let nTok = Data("\"token_count\"".utf8), nCtx = Data("\"turn_context\"".utf8)
     var model = "unknown", prev = (i: 0, c: 0, w: 0, o: 0)
-    var items: [(model: String, u: Usage, ts: Double)] = []
+    var items: [Billed] = []
     for line in lines {
         let isTok = line.range(of: nTok) != nil, isCtx = line.range(of: nCtx) != nil
         guard isTok || isCtx, let o = try? JSONSerialization.jsonObject(with: line) as? [String: Any], let p = o["payload"] as? [String: Any] else { continue }
@@ -175,7 +178,7 @@ func scanGemini(_ url: URL, size: Int, mtime: Double) -> FileStats {
         let needle = Data("\"tokens\"".utf8)
         recs = lines.filter { $0.range(of: needle) != nil }.compactMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
     }
-    var best: [String: (model: String, u: Usage, ts: Double)] = [:]
+    var best: [String: Billed] = [:]
     for r in recs {
         guard r["type"] as? String == "gemini", let t = r["tokens"] as? [String: Any] else { continue }
         let cached = t["cached"] as? Int ?? 0

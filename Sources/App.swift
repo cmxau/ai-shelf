@@ -56,17 +56,7 @@ import SwiftUI
         }
         CommandGroup(after: .toolbar) {
             Menu("Sort By") {
-                ForEach(RowSort.Field.allCases, id: \.self) { f in
-                    Button {
-                        m.sortBy(f)
-                    } label: {
-                        if let c = m.sortOrder.first, c.field == f {
-                            Label(f.title + (c.order == .forward ? "  ↑" : "  ↓"), systemImage: "checkmark")
-                        } else {
-                            Text(f.title)
-                        }
-                    }
-                }
+                SortButtons()
             }
             Picker("Agent", selection: $cli) {
                 Text("All agents").tag("all"); ForEach(m.agents, id: \.self) { Text($0).tag($0) }

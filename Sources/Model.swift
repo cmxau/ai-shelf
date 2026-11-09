@@ -115,7 +115,7 @@ final class Model: ObservableObject {
 
     // MARK: clean up
     func cleanUp(olderThan days: Int?) {
-        let cutoff = Date().addingTimeInterval(-Double(days ?? 0) * 86_400)
+        let cutoff = Date().addingTimeInterval(-Double(days ?? 0) * secondsPerDay)
         let hits = projects.flatMap { $0.children ?? [] }.filter {
             $0.sessionID != nil && !pins.contains(markKey($0)) && (days == nil ? ($0.title == "(no prompt)" || $0.title.isEmpty) : $0.modified < cutoff)
         }

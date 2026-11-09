@@ -151,7 +151,7 @@ final class Updater: ObservableObject {
     func launchCheck() {
         guard pref(Pref.autoCheckUpdates, true) else { return }
         let last = UserDefaults.standard.double(forKey: Pref.lastUpdateCheck)
-        if Date().timeIntervalSince1970 - last > 86_400 { check(thenInstall: pref(Pref.autoInstallUpdates, false), silent: true) }
+        if Date().timeIntervalSince1970 - last > secondsPerDay { check(thenInstall: pref(Pref.autoInstallUpdates, false), silent: true) }
     }
 }
 

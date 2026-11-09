@@ -1,0 +1,52 @@
+name: Bug report
+description: Something in AI Shelf doesn't work as expected
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open AI Shelf
+        2. Select ...
+        3. Click ...
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Which agent is involved?
+      options: [Claude, Antigravity (agy), Codex, Gemini, Other / launch only, Not agent-specific]
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: AI Shelf version
+      description: Settings → About
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+    validations:
+      required: true
+  - type: dropdown
+    id: terminal
+    attributes:
+      label: Terminal used
+      options: [Terminal, iTerm, Ghostty, WezTerm, Alacritty, Not relevant]
+  - type: textarea
+    id: extra
+    attributes:
+      label: Screenshots or logs
+      description: Drag images here. Please remove anything private (project paths, prompts).

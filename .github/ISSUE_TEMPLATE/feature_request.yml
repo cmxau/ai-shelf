@@ -1,0 +1,40 @@
+name: Feature request
+description: Suggest an idea or improvement for AI Shelf
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe what you're trying to do and what gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What would you like to see?
+    validations:
+      required: true
+  - type: dropdown
+    id: agent
+    attributes:
+      label: Is this about a specific agent?
+      options: [No, Claude, Antigravity (agy), Codex, Gemini, OpenCode, Goose, Aider, Amp, Cursor, Copilot, Other]
+  - type: textarea
+    id: sample
+    attributes:
+      label: Sample data (for new agent support)
+      description: For a new agent, the folder where it stores history and a redacted sample session file helps a lot.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives you've considered
+  - type: input
+    id: version
+    attributes:
+      label: AI Shelf version
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version

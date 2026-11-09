@@ -1,6 +1,6 @@
 import SwiftUI
 
-// MARK: - Usage stats (Claude only: its session files record token usage per message)
+// MARK: - Usage stats (Claude, Codex and Gemini session files record token usage; Antigravity does not)
 
 struct Usage: Codable {
     var input = 0, output = 0, cacheWrite = 0, cacheRead = 0
@@ -112,11 +112,7 @@ func scan(_ url: URL, size: Int, mtime: Double) -> FileStats {
         if let e = best[id], e.u.output >= usage.output { continue }
         best[id] = (model, usage, (o["timestamp"] as? String).flatMap(epoch) ?? fs.first ?? 0)
     }
-    for (_, e) in best {
-        fs.days[dayFmt.string(from: Date(timeIntervalSince1970: e.ts)), default: [:]][e.model, default: Usage()] += e.u
-        fs.models[e.model, default: Usage()] += e.u
-        fs.total += e.u
-    }
+    fold(&fs, Array(best.values))
     return fs
 }
 
@@ -202,12 +198,11 @@ func scanFile(_ url: URL, agent: String, size: Int, mtime: Double) -> FileStats 
 
 final class StatsStore: ObservableObject {
     static let shared = StatsStore()
-    @Published var bySession: [String: FileStats] = [:]  // Project.id of a claude session -> totals (incl. its subagents)
+    @Published var bySession: [String: FileStats] = [:]  // Project.id of a session -> totals (incl. a Claude session's subagents)
     @Published var computing = false
     @Published var ledger: [String: FileStats] = [:] { didSet { lifetime = Lifetime(ledger) } }  // every session file ever scanned
     @Published var lifetime = Lifetime()
     @Published var dataStatus = ""
-    var info: [String: String] = [:]  // session id -> project path
     private var cache: [String: FileStats] = [:]  // file path -> stats, keyed by size + mtime; touched only on `queue`
     private let queue = DispatchQueue(label: "stats", qos: .utility)
     private let cacheURL = cacheDir.appendingPathComponent("stats-v2.json")
@@ -316,7 +311,6 @@ final class StatsStore: ObservableObject {
         guard pref("calcStats", true) else { return }
         let sessions = projects.flatMap { p in (p.children ?? []).filter { statsAgents.contains($0.agent) && $0.sessionID != nil }.map { (p.path, $0) } }
         if sessions.isEmpty { return }
-        info = Dictionary(sessions.map { ($0.1.id, $0.0) }, uniquingKeysWith: { a, _ in a })
         computing = true
         queue.async {
             var batch: [String: FileStats] = [:], first = true

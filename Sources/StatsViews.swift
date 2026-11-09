@@ -41,7 +41,7 @@ struct StatCard: View {
     }
 }
 
-/// Lifetime totals from the ledger (Claude sessions, including ones Claude Code has since expired or you deleted).
+/// Lifetime totals from the ledger (Claude, Codex and Gemini sessions, including ones the CLI has since expired or you deleted).
 struct StatsCards: View {
     @ObservedObject var s = StatsStore.shared
     @ObservedObject var book = PriceBook.shared
@@ -144,7 +144,7 @@ struct StatsView: View {
             .font(.caption).foregroundStyle(.secondary)
         }
         .padding().frame(minWidth: 820, minHeight: 540)
-        .onAppear {  // independent of the agent picker: always refresh from Claude's history (cache makes this quick)
+        .onAppear {  // not tied to the agent picker: refreshes from Claude's history (cache makes this quick)
             DispatchQueue.global(qos: .utility).async {
                 let ps = loadClaude(); DispatchQueue.main.async { s.refresh(ps) }
             }

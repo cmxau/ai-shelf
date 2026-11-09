@@ -146,7 +146,7 @@ struct SettingsView: View {
 
     var usageTab: some View {
         Form {
-            Section("Token stats (Claude)") {
+            Section("Token stats") {
                 Toggle("Calculate token usage (reads each session file once, then cached)", isOn: $calcStats)
                 Toggle("Show statistics cards at the top of the window", isOn: $showCards)
             }
@@ -161,8 +161,8 @@ struct SettingsView: View {
             }
             Section("Statistics data") {
                 HStack {
-                    Button("Export…") { exportStats() }
-                    Button("Import…") { importStats() }
+                    Button("Export…") { exportStatsPanel() }
+                    Button("Import…") { importStatsPanel() }
                 }
                 Text(
                     stats.dataStatus.isEmpty
@@ -220,9 +220,6 @@ struct SettingsView: View {
             }
         }
     }
-
-    func exportStats() { exportStatsPanel() }
-    func importStats() { importStatsPanel() }
 
     func enabled(_ a: String) -> Binding<Bool> {
         Binding(

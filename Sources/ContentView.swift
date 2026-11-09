@@ -189,12 +189,13 @@ struct ContentView: View {
             }
             .sharedBackgroundVisibility(m.searchOpen ? .hidden : .automatic)
         }
-        .onAppear {  // saved choice may no longer be installed
+        .onAppear {
             NSApp.setActivationPolicy(.regular)  // an open window always gets a menu bar, even with "Show Dock icon" off
             NSApp.activate(ignoringOtherApps: true)
             if UserDefaults.standard.integer(forKey: "columnsVersion") < 3 {
                 cols = TableColumnCustomization(); UserDefaults.standard.set(3, forKey: "columnsVersion")
             }
+            // a saved choice may no longer be installed
             if cli != "all" && !m.agents.contains(cli) { cli = m.agents.first ?? "all" }
             if !terminals.contains(terminal) { terminal = "Terminal" }
         }

@@ -21,8 +21,7 @@ func loadClaude() -> [Project] {
             let sid = f.deletingPathExtension().lastPathComponent
             let extra = d.appendingPathComponent(sid)  // per-session folder (subagents, tool results)
             let title = head.split(separator: "\n").lazy.compactMap(msg).first { $0.role == "user" && !$0.text.hasPrefix("<") }?.text ?? "(no prompt)"
-            let mod = (try? f.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
-            rows.append((sid, [f] + (fm.fileExists(atPath: extra.path) ? [extra] : []), mod, oneLine(title)))
+            rows.append((sid, [f] + (fm.fileExists(atPath: extra.path) ? [extra] : []), modDate(f), oneLine(title)))
         }
         let kids = rows.map {
             Project(
@@ -67,7 +66,6 @@ func loadAgy() -> [Project] {
     }.sorted { $0.modified > $1.modified }
 }
 
-// Agents we can't read history for: list every known folder so any of them can be opened with that agent.
 // MARK: - Codex and Gemini readers
 // Built from the vendors' own source definitions (openai/codex protocol.rs, google-gemini/gemini-cli chatRecordingTypes.ts),
 // NOT from real session data: neither CLI has any on this machine. Treat as unverified until tried on real sessions.
@@ -178,6 +176,7 @@ func geminiPreview(_ f: URL) -> [(String, String)] {
     return [("First message", first ?? ""), ("Last message (assistant)", last ?? "")].filter { !$0.1.isEmpty }
 }
 
+/// Agents we can't read history for: list every known folder so any of them can be opened with that agent.
 func loadFolders() -> [Project] {
     var byPath: [String: Project] = [:]
     for p in historyAgents.flatMap(loadHistory) {
